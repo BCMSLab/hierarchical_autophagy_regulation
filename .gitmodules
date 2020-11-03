@@ -1,0 +1,6 @@
+[submodule "manuscript"]
+	path = manuscript
+	url = https://git.overleaf.com/5fa0d9c6e1be7d000199ffd6
+[submodule "ChromHMM"]
+	path = ChromHMM
+	url = https://github.com/jernst98/ChromHMM

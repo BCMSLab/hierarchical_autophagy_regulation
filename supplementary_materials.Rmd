@@ -1,0 +1,453 @@
+---
+title: "EDA: Hierarchical Regulation of Autophagy During Adipocyte Differentiation"
+author: "Mahmoud Shaaban"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r load_libraries}
+# load required libraries
+library(segmentr)
+library(tidyverse)
+library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+library(org.Mm.eg.db)
+library(ComplexHeatmap)
+library(circlize)
+library(SummarizedExperiment)
+library(reshape2)
+library(ggupset)
+library(cowplot)
+```
+
+```{r factors_short}
+factors_short <- read_rds('data/model_factors_short.rds')
+```
+
+```{r factors_short_states, fig.height=5,fig.width=11, fig.cap="Short acting transcription factors states of the differentiating adipocytes. Genome segmentation analysis was performed using transcription factors ChIP-Seq datasets at different time points. The genome was divided into 100bp bins, and each factor was identified as present or absent. Ten stats was used to model the combinatorial states of the factors Emission, the probability of each factor being at a given state. Transition, the transitional probability of a given state to another. The overlap fold enrichment of each state in a given genomic annotation at different time points (Hour 0 and 4)."}
+# names for the states
+states_factor_short <- c('Insulated',
+            'Insulated + Ubiquitous Binding', 'Ubiquitous Binding',
+            'Co-Factor Binding',
+            'Factor Devoid 1', 
+            'Early Acting (CEBPB + MED1)',
+            'Factor Devoid 2',
+            'Factor Devoid 3',
+            'Repressed',
+            'Long Acting (PPARG + RXRG)')
+
+# give names to genomic locations
+anno <- c('Genome', 'Exon', 'Gene', 'TES', 'TSS', 'TSS2kb')
+
+# chromatin model using short acting factors
+col_func <- colorRamp2(c(0, 1), c('white', 'blue'))
+
+# emission
+hm1 <- Heatmap(emission(factors_short),
+        col = col_func,
+        row_labels = states_factor_short,
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        show_heatmap_legend = FALSE,
+        column_title = 'Emission')
+
+# transition
+hm2 <- Heatmap(transition(factors_short),
+        col = col_func,
+        row_labels = states_factor_short,
+        column_labels = states_factor_short,
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        show_heatmap_legend = FALSE,
+        column_title = 'Transition')
+
+# overlap enrichment
+hms <- map2(overlap(factors_short),
+            paste('Hour', c(0, 4)),
+            function(x, y) {
+    col_func <- colorRamp2(c(min(x), max(x)), c('white', 'blue'))
+    Heatmap(x,
+            col = col_func,
+            cluster_rows = FALSE,
+            cluster_columns = FALSE,
+            row_labels = states_factor_short,
+            column_labels = anno,
+            show_heatmap_legend = FALSE,
+            column_title = y)
+})
+
+# plot heatmaps
+hm1 + hm2 + hms[[1]] + hms[[2]]
+```
+
+```{r factors_long}
+factors_long <- read_rds('data/model_factors_long.rds')
+```
+
+```{r factors_long_states, fig.height=5,fig.width=11, fig.cap="Long acting transcription factors states of the differentiating adipocytes. Genome segmentation analysis was performed using transcription factors ChIP-Seq datasets at different time points. The genome was divided into 100bp bins, and each factor was identified as present or absent. Eight stats was used to model the combinatorial states of the factors Emission, the probability of each factor being at a given state. Transition, the transitional probability of a given state to another. The overlap fold enrichment of each state in a given genomic annotation at different time points up to day 7 at 24 hours intervals."}
+# names for the states
+states_factor_long <- c('Early Acting (CEBPB + MED1 + RXRG)',
+            'Factor Devoid 1', 
+            'Long Acting (PPARG + RXRG)',
+            'Factor Devoid 2', 
+            'Long Acting (PPARG)',
+            'Long Acting (PPARG + RXRG + MED1)',
+            'Ubiquitous Binding',
+            'Insulated')
+
+# chromatin model using long acting factors
+col_func <- colorRamp2(c(0, 1), c('white', 'blue'))
+
+# emission
+hm1 <- Heatmap(emission(factors_long),
+        col = col_func,
+        row_labels = states_factor_long,
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        show_heatmap_legend = FALSE,
+        column_title = 'Emission')
+
+# transition
+hm2 <- Heatmap(transition(factors_long),
+        col = col_func,
+        row_labels = states_factor_long,
+        column_labels = states_factor_long,
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        show_heatmap_legend = FALSE,
+        column_title = 'Transition')
+
+# overlap enrichment
+hms <- map2(overlap(factors_long)[c(1, 3, 5, 7)],
+            paste('Hour', c(0, 48, 96, 168)),
+            function(x, y) {
+    col_func <- colorRamp2(c(min(x), max(x)), c('white', 'blue'))
+    Heatmap(x,
+            col = col_func,
+            cluster_rows = FALSE,
+            cluster_columns = FALSE,
+            row_labels = states_factor_long,
+            column_labels = anno,
+            show_heatmap_legend = FALSE,
+            column_title = y)
+})
+
+# plot heatmaps
+hm1 + hm2 + hms[[1]] + hms[[2]] + hms[[3]] + hms[[4]]
+```
+
+```{r model_hm}
+# load model
+model_hm <- read_rds('data/model_hm.rds')
+```
+
+```{r hm_states, fig.height=5,fig.width=11, fig.cap="Chromatin states of the differentiating adipocytes. Genome segmentation analysis was performed using histone modification markers ChIP-Seq datasets at different time points. The genome was divided into 200bp bins, and each marker was identified as present or absent. Nine stats was used to model the combinatorial states of the markers. Emission, the probability of each marker being at a given state. Transition, the transitional probability of a given state to another. The overlap fold enrichment of each state in a given genomic annotation at different time points (Hour 0, 48 and 168)."}
+
+# give names to states in order
+states <- c('Active Promoter', 'Weak Enhancer', 'Active Enhancer',
+            'Genic Enhancer 1', 'Genic Enhancer 2', 'Heterochromatin ',
+            'Repeats', 'Repressed Polycomb', 'Strong Transcription')
+
+# chromatin chromatin model using hms
+col_func <- colorRamp2(c(0, 1), c('white', 'blue'))
+
+# emission
+hm1 <- Heatmap(emission(model_hm),
+        col = col_func,
+        row_labels = states,
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        show_heatmap_legend = FALSE,
+        column_title = 'Emission')
+
+# transition
+hm2 <- Heatmap(transition(model_hm),
+        col = col_func,
+        row_labels = states,
+        column_labels = states,
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        show_heatmap_legend = FALSE,
+        column_title = 'Transition')
+
+# overlap enrichment
+hms <- map2(overlap(model_hm),
+            paste('Hour', c(0, 48, 168)),
+            function(x, y) {
+    col_func <- colorRamp2(c(min(x), max(x)), c('white', 'blue'))
+    Heatmap(x,
+            col = col_func,
+            cluster_rows = FALSE,
+            cluster_columns = FALSE,
+            row_labels = states,
+            column_labels = anno,
+            show_heatmap_legend = FALSE,
+            column_title = y)
+})
+
+# plot heatmaps
+hm1 + hm2 + hms[[1]] + hms[[2]] + hms[[3]]
+```
+
+```{r differential_expression, fig.height=9,fig.width=8, fig.cap="Fractions of differentially expressed genes during the time course of differentiation with or with out genetic perturbations. 3T3-L1 were induced to differentiate using MDI and sampled at different time points. Gene expression was quantfied using RNA-seq (n = ). The fraction of differentially expressed genes are showen for the comparison between each time point and the hour 0. A similar timecourse was applied for PPARG knockdown 3T3-L1 and gene expression was quantified using microarrays (n = ). Another timecourse was applied for PPARG knockdown 3T3-L1 and gene expression was quantified using microarrays (n = )."}
+diff_expr <- read_rds('data/differential_expression.rds')
+gene_annotations <- read_rds('data/gene_annotations.rds') %>%
+    dplyr::select(category, gene_id = SYMBOL) %>%
+    filter(category %in% c('Autophagy', 'Lipogenesis')) %>%
+    unique() %>%
+    as_tibble()
+
+df <- diff_expr %>%
+    na.omit() %>%
+    left_join(gene_annotations) %>%
+    mutate(category = ifelse(is.na(category), 'Other', category),
+           course = factor(course, levels = c('None', 'PPARG', 'CEBPB'))) %>%
+    group_by(course, time, category) %>%
+    summarise(up = sum(padj < .1 & fold_change > 1)/n(),
+              down = sum(padj < .2 & fold_change < -1)/n()) %>%
+    pivot_longer(c('up', 'down'),
+                 names_to = 'direction',
+                 values_to = 'number')
+df %>%
+    ggplot(aes(x = as.factor(time), y = number, fill = direction)) +
+    geom_col() +
+    facet_grid(category~course,
+               scales = 'free_x',
+               space = 'free_x',
+               drop = TRUE) +
+    theme(legend.position = 'top') +
+    labs(x = 'Time (hr)',
+         y = 'Fraction of Differentially Expressed Genes')
+```
+
+```{r binding_peaks, fig.height=8, fig.width=10}
+binding_peaks <- read_rds('data/binding_peaks.rds')
+
+# mcols(binding_peaks) %>%
+#     as_tibble() %>%
+#     filter(factor != 'CTCF') %>%
+#     group_by(geneId) %>%
+#     summarise(factors = list(unique(factor))) %>%
+#     ggplot(aes(x = factors)) +
+#     geom_bar() +
+#     scale_x_upset()
+
+mcols(binding_peaks) %>%
+    as_tibble() %>%
+    filter(factor != 'CTCF',
+           !time %in% c(2, 6)) %>%
+    mutate(time = factor(time, levels = c(0, 4, 24, 48, 72, 96, 144, 168))) %>%
+    group_by(time, geneId) %>%
+    summarise(factors = list(unique(factor))) %>%
+    ggplot(aes(x = factors), fill = as.factor(time)) +
+    geom_bar() +
+    scale_x_upset() +
+    facet_wrap(~time, scales = 'free_x', nrow = 2)
+```
+
+```{r peaks_by_factor, fig.height=8, fig.width=16}
+peaks_by_factor <- mcols(binding_peaks) %>%
+    as_tibble() %>%
+    filter(!factor %in% c('CTCF'),
+           !time %in% c(2, 6)) %>%
+    mutate(time = factor(time, levels = c(0, 4, 24, 48, 72, 96, 144, 168))) %>%
+
+    group_by(time, geneId) %>%
+    summarise(factors = list(unique(factor))) %>%
+    group_split(time)
+
+map(peaks_by_factor,
+    function(x) {
+        ggplot(x, aes(x = factors)) +
+            geom_bar() +
+            scale_x_upset(n_intersections = 10) +
+            ggtitle(unique(x$time)) +
+            labs(x = 'Set Intersections (Time)',
+                 y = 'Number of Targets')
+    }) %>%
+    plot_grid(plotlist = .,
+                       nrow = 2,
+                       scale = .9,
+                       labels = 'AUTO',
+                       label_fontface = 'plain')
+```
+
+```{r peaks_by_time, fig.height=8, fig.width=8}
+peaks_by_time <- mcols(binding_peaks) %>%
+    as_tibble() %>%
+    filter(!factor %in% c('CTCF', 'EP300')) %>%
+    group_by(factor, geneId) %>%
+    summarise(times = list(unique(time))) %>%
+    group_split(factor)
+
+map(peaks_by_time,
+    function(x) {
+        ggplot(x, aes(x = times)) +
+            geom_bar() +
+            scale_x_upset(n_intersections = 10) +
+            ggtitle(unique(x$factor)) +
+            labs(x = 'Set Intersections (Time)',
+                 y = 'Number of Targets')
+    }) %>%
+    plot_grid(plotlist = .,
+                       nrow = 2,
+                       scale = .9,
+                       labels = 'AUTO',
+                       label_fontface = 'plain')
+```
+
+```{r peaks_by_group, fig.height=16, fig.width=16}
+gene_annotations <- read_rds('data/gene_annotations.rds') %>%
+    dplyr::select(category, geneId = ENTREZID) %>%
+    filter(category %in% c('Autophagy', 'Lipogenesis')) %>%
+    unique() %>%
+    as_tibble()
+
+peaks_by_group <-  mcols(binding_peaks) %>%
+    as_tibble() %>%
+    filter(!factor %in% c('CTCF', 'EP300')) %>%
+    left_join(gene_annotations) %>%
+    mutate(category = ifelse(is.na(category), 'Other', category)) %>%
+    unite('group', c('category', 'factor')) %>%
+    group_by(group, geneId) %>%
+    summarise(times = list(unique(time))) %>%
+    group_split(group)
+
+map(peaks_by_group,
+    function(x) {
+        ggplot(x, aes(x = times)) +
+            geom_bar() +
+            scale_x_upset(n_intersections = 10) +
+            ggtitle(unique(x$group)) +
+            # geom_text(stat='count',
+            #           aes(label=after_stat(count)),
+            #           vjust=-1) +
+            labs(x = 'Set Intersections (Time)',
+                 y = 'Number of Targets')
+    }) %>%
+    plot_grid(plotlist = .,
+                       nrow = 3,
+                       scale = .9,
+                       labels = 'AUTO',
+                       label_fontface = 'plain')
+```
+
+```{r processes_enrichment, fig.height=6, fig.width=10}
+set_enrichment <- read_rds('data/gene_set_enrichment.rds')
+gene_annotations <- read_rds('data/gene_annotations.rds') %>%
+    dplyr::select(type = category, pathway = GO) %>%
+    distinct() %>%
+    mutate(term = unlist(map(pathway, ~GO.db::GOTERM[[.x]]@Term)))
+(set_enrichment %>%
+    filter(categories == "GO Biological Processes") %>%
+    separate(group, into = c('course', 'time')) %>%
+    mutate(course = factor(course, levels = c('None', 'PPARG', 'CEBPB'))) %>%
+    left_join(gene_annotations) %>%
+    ggplot(aes(x = as.numeric(time), y = NES,
+               color = term, group = term, shape = pval < .05)) +
+    geom_point() +
+    geom_line() +
+    facet_grid(course~type, scales = 'free', drop = TRUE) +
+        theme(legend.position = 'top') +
+        labs(x = 'Time (hr)',
+             y = 'Normalized Ernichment Score',
+             color = ''))
+```
+
+```{r peaks_enrichment, fig.height=6,fig.width=8}
+set_enrichment %>%
+    filter(grepl('Peak', categories)) %>%
+    separate(group, into = c('course', 'time_course'), remove = FALSE) %>%
+    separate(pathway, into = c('factor', 'time_factor'), remove = FALSE) %>%
+    filter(time_course == time_factor,
+           course == 'None') %>%
+    mutate(time_course = factor(time_course, levels = c(0, 4, 24, 48, 72, 96, 144, 168))) %>%
+    na.omit() %>%
+    ggplot(aes(x = time_course, y = NES)) +
+    geom_col() +
+    facet_grid(categories ~ factor,
+               scales = 'free_x', space = 'free_x',
+               drop = TRUE) +
+    labs(x = 'Time (hr)',
+         y = 'Normalized Ernichment Score')
+```
+
+```{r peaks_enrichment_perturbations, fig.height=5,fig.width=5}
+set_enrichment %>%
+    filter(grepl('Peak', categories)) %>%
+    separate(group, into = c('course', 'time_course'), remove = FALSE) %>%
+    separate(pathway, into = c('factor', 'time_factor'), remove = FALSE) %>%
+    filter(time_course == time_factor,
+           course == factor) %>%
+     mutate(time_course = factor(time_course, levels = c(0, 4, 24, 48, 72, 96, 144, 168))) %>%
+    na.omit() %>%
+    ggplot(aes(x = time_course, y = NES)) +
+    geom_col() +
+    facet_grid(categories ~ factor,
+               scales = 'free_x', space = 'free_x',
+               drop = TRUE) +
+    labs(x = 'Time (hr)',
+         y = 'Normalized Ernichment Score')
+```
+
+```{r peaks_overlap_enrichment, fig.width=6, fig.height=3.5}
+peaks_overlap_enrichment <- read_rds('data/peaks_overlap_enrichment.rds')
+mats <- peaks_overlap_enrichment %>%
+    group_by(hour) %>%
+    group_split() %>%
+    map(function(x) {
+        m <- dplyr::select(x, -hour, -state, -genome) %>% as.matrix()
+        nms <- str_split(colnames(m), '_', simplify = TRUE)
+        ind <- nms[, 2] == unique(x$hour)
+        m <- (m[, ind])
+        rownames(m) <- states
+        colnames(m) <- nms[, 1][ind]
+        m
+    })
+names(mats) <- unique(peaks_overlap_enrichment$hour)
+
+hms <- imap(mats, function(x, .y) {
+    col_func <- colorRamp2(c(min(x), max(x)), c('white', 'blue'))
+    Heatmap(x, 
+            col = col_func,
+            cluster_rows = FALSE,
+            cluster_columns = FALSE,
+            show_heatmap_legend = FALSE,
+            column_title = paste('Hour', .y))
+})
+
+hms$`0` + hms$`48` + hms$`168`
+```
+
+```{r targets_over_representation, fig.height=8, fig.width=8}
+targets_over_representation <- read_rds('data/targets_over_representation.rds') %>%
+    as_tibble() %>%
+    filter(!grepl('CTCF', group),
+           !grepl('CTCF', ID)) %>%
+    separate(GeneRatio, into = c('count', 'bg'), sep = '/') %>%
+    mutate(ratio = as.numeric(count)/as.numeric(bg)) %>%
+    dcast(category + group ~ ID, value.var = 'ratio') %>%
+    group_split(category)
+
+map(targets_over_representation, function(x) {
+    df <- x
+    mat <- as.matrix(df[, 3:ncol(df)])
+    cols <- str_split(colnames(mat), '_', simplify = TRUE)
+    rows <- str_split(df$group, '_', simplify = TRUE)
+    
+    col_func <- colorRamp2(c(0, 1), c('white', 'blue'))
+    Heatmap(mat,
+            col = col_func,
+            column_labels = cols[, 2],
+            row_labels = rows[, 2],
+            column_split = cols[, 1],
+            row_split = rows[, 1],
+            cluster_columns = FALSE,
+            cluster_column_slices = FALSE,
+            cluster_rows = FALSE,
+            show_heatmap_legend = FALSE)
+})
+```

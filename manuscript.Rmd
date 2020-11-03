@@ -1,0 +1,385 @@
+---
+title: "Hierarchical Regulation of Autophagy During Adipocyte Differentiation"
+author: "Mahmoud Shaaban"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r load_libraries}
+# load required libraries
+library(segmentr)
+library(tidyverse)
+library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+library(org.Mm.eg.db)
+library(ComplexHeatmap)
+library(circlize)
+library(SummarizedExperiment)
+library(reshape2)
+library(ggupset)
+library(cowplot)
+library(DESeq2)
+library(segmentr)
+library(ggupset)
+```
+
+```{r autophagy_expression, fig.height=6, fig.width=6, fig.cap="Autophgy gene products expression during adipocyte differentiation. A) Numbers of differentially expressed autophagy genes in either direction (up- or down-regulated) at different time points of differentiation. B) Gene set enrichment of the gene onotlogy term 'autophagy' and 'lipogenesis' at different time points of differentiation. C) Numbers of differentially expressed autophagy genes in either direction (up- or down-regulated) at different time points of differentiation with the perturbation of Pparg or Cebpb. D) Percentage of autophagy gene expression variance explained by the expression of transcription factors and co-factors coding genes during the time course of differentiation."}
+# load data
+gene_annotations <- read_rds('data/gene_annotations.rds') %>%
+    as_tibble() %>%
+    dplyr::select(category, gene_id = SYMBOL)
+
+# numbers of differentially expressed genes
+differential_expression <- read_rds('data/differential_expression.rds') %>%
+    left_join(gene_annotations) %>%
+    filter(padj < .2) %>%
+    mutate(dir = ifelse(fold_change > 0, 'Up', 'Down'),
+           time = fct_reorder(factor(time), time)) %>%
+    group_by(category, course, time, dir) %>%
+    summarise(n = n())
+
+gene_annotations <- read_rds('data/gene_annotations.rds') %>%
+    with(split(SYMBOL, category)) %>%
+    map(unique)
+
+adipo_counts <- read_rds('data/adipo_counts.rds')
+adipo_counts$time <- relevel(factor(adipo_counts$time), ref = '0')
+
+dds <- DESeqDataSet(adipo_counts, ~time)
+trans_counts <- vst(dds)
+
+factors <- c('Pparg', 'Cebpb', 'Med1', 'EP300', 'Rxrg')
+
+ind <- rownames(adipo_counts) %in% c(gene_annotations$Autophagy, factors)
+mat <- assay(trans_counts)[ind,]
+
+vars <- apply(mat, 1, var)
+variance <- tibble(gene = rownames(mat),
+                   var_exp = vars/sum(vars))
+
+gene_set_enrichment <- read_rds('data/gene_set_enrichment.rds')
+
+plot_grid(
+    differential_expression %>%
+    filter(category == 'Autophagy',
+           course == 'None') %>%
+    ggplot(aes(x = time, y = n, fill = dir)) +
+    geom_col(position = 'dodge') +
+    labs(x = 'Time (hr)',
+         y = 'Differentially Expressed Genes',
+         fill = 'Regualtion') +
+    theme(legend.position = 'top'),
+        gene_set_enrichment %>%
+    filter(grepl('None', group),
+    pathway %in% c('GO:0006914', 'GO:0006629')) %>%
+    separate(group, c('course', 'time'), '_') %>%
+    mutate(time = fct_reorder(factor(time), as.numeric(time))) %>%
+    ggplot(aes(x = time, y= NES, color = pathway, group = pathway)) +
+    geom_point() +
+    geom_line() +
+    annotate('text', c(6, 6), y = c(0, 1.5),
+    label = c('Autophagy', 'Lipogenesis')) +
+    labs(x = 'Time (hr)',
+         y = 'Normalized Enrichment Score') +
+    theme(legend.position = 'none'),
+    differential_expression %>%
+    filter(category == 'Autophagy',
+           course != 'None') %>%
+    ggplot(aes(x = time, y = n, fill = dir)) +
+    geom_col(position = 'dodge') +
+    facet_grid(~course, scales = 'free_x', space = 'free_x') +
+    labs(x = 'Time (hr)',
+         y = 'Differentially Expressed Genes',
+         fill = 'Regualtion') +
+    theme(legend.position = 'top'),
+    variance %>%
+    filter(gene %in% factors) %>%
+    mutate(gene = fct_reorder(gene, var_exp)) %>%
+    ggplot(aes(x = gene, y = var_exp, .desc = TRUE)) +
+    geom_col() +
+    labs(x = 'Transcription Factor Gene',
+         y = 'Variance Explained (%)'),
+    nrow = 2,
+    labels = 'AUTO',
+    label_fontface = 'plain',
+    scale = .9
+) %>%
+    ggsave(plot = .,
+           filename = 'manuscript/figures/autophagy_expression.png',
+           height = 6, width = 6)
+```
+
+```{r model_factors, fig.height=8, fig.width=6, fig.cap="Transcription factor states in the differentiating adipocytes. Genome segmentation analysis wasperformed using transcription factors ChIP-Seq datasets at different time points. The genome was dividedinto 100bp bins, and each factor was identified as present or absent. Ten and eight stats was used to modelthe combinatorial states of the factors from A) 0 to day 2 B) from 0 to day 7, respectively. Emission, theprobability of each marker being at a given state. Transition, the transitional probability of a given state toanother."}
+model_factors_short <- read_rds('data/model_factors_short.rds')
+states_factor_short <- c('Insulated',
+            'Insulated + Ubiquitous Binding', 'Ubiquitous Binding',
+            'Co-Factor Binding',
+            'Factor Devoid 1', 
+            'Early Acting (CEBPB + MED1)',
+            'Factor Devoid 2',
+            'Factor Devoid 3',
+            'Repressed',
+            'Long Acting (PPARG + RXRG)')
+short_emission <- emission(model_factors_short)
+rownames(short_emission) <- states_factor_short
+short_transition <- transition(model_factors_short)
+rownames(short_transition) <- states_factor_short
+colnames(short_transition) <- states_factor_short
+
+model_factors_long <- read_rds('data/model_factors_long.rds')
+states_factor_long <- c('Early Acting (CEBPB + MED1 + RXRG)',
+            'Factor Devoid 1', 
+            'Long Acting (PPARG + RXRG)',
+            'Factor Devoid 2', 
+            'Long Acting (PPARG)',
+            'Long Acting (PPARG + RXRG + MED1)',
+            'Ubiquitous Binding',
+            'Insulated')
+
+long_emission <- emission(model_factors_long)
+rownames(long_emission) <- states_factor_long
+long_transition <- transition(model_factors_long)
+rownames(long_transition) <- states_factor_long
+colnames(long_transition) <- states_factor_long
+
+model <- list(
+    list('Emission Probability' = short_emission,
+         'Transition Probability' = short_transition),
+    list('Emission Probability' = long_emission,
+        'Transition Probability' = long_transition)
+)
+model %>%
+    map(
+    function(x) map_df(x, melt, .id = 'type') %>%
+    as_tibble() %>%
+    ggplot(aes(x = Var2, y = Var1, fill = value)) +
+    geom_tile() +
+    facet_wrap(~type, scales = 'free_x',
+               nrow = 1) +
+    scale_fill_gradient(low = 'white', high = 'blue') +
+    labs(x = '', y = '') +
+    theme(legend.position = 'none',
+          axis.text.x = element_text(angle = 45, hjust = 1))
+    ) %>%
+    plot_grid(plotlist = .,
+              ncol = 1,
+              labels = 'AUTO',
+              label_fontface = 'plain') %>%
+    ggsave(plot = .,
+           filename = 'manuscript/figures/model_factors.png',
+           height = 8, width = 6)
+```
+
+```{r state_frequencies, fig.height=4, fig.width=9, fig.cap="Frequencies of states in transcription factor and co-factors multi-states chromatine models. A) The fraction of selected states to the total in autophagy and lipogenesis genes of the A) early B) late-acting transcription factors models are shown."}
+gene_annotations <- read_rds('data/gene_annotations.rds') %>%
+    dplyr::select(category, geneId = ENTREZID) %>%
+    unique()
+
+plot_grid(
+    map_df(segment(model_factors_short), as_tibble, .id = 'time') %>%
+    left_join(gene_annotations) %>%
+    left_join(tibble(state = paste0('E', 1:10),
+                     name = states_factor_short)) %>%
+    filter(category %in% c('Autophagy', 'Lipogenesis'),
+           abs(distanceToTSS) < 50000,
+           name %in% states_factor_short[c(1:4, 9)]) %>%
+    ggplot(aes(x = name, fill = time)) +
+    geom_bar(position = 'dodge') +
+    coord_flip() +
+    labs(y = 'State Frequency', x = '', fill = 'Time (hr)') +
+    facet_wrap(~category, scales = 'free_x', nrow = ) +
+    theme(legend.position = 'top'),
+map_df(segment(model_factors_long), as_tibble, .id = 'time') %>%
+    left_join(gene_annotations) %>%
+    left_join(tibble(state = paste0('E', 1:8),
+                     name = states_factor_long)) %>%
+    filter(category %in% c('Autophagy', 'Lipogenesis'),
+           abs(distanceToTSS) < 50000,
+           name %in% states_factor_long[c(1, 3, 5, 6)]) %>%
+    mutate(time = str_split(time, '_',simplify = TRUE)[, 2],
+           time = fct_reorder(time, as.numeric(time))) %>%
+    ggplot(aes(x = time, fill = name)) +
+    geom_bar() +
+    facet_wrap(~category, scales = 'free_x') +
+    labs(x = 'Time (hr)', y = 'State Frequency', fill = '') +
+    theme(legend.position = 'top',
+          legend.direction = 'vertical'),
+scale = .9,
+labels = 'AUTO',
+label_fontface = 'plain'
+) %>%
+    ggsave(plot = .,
+           filename = 'manuscript/figures/state_frequencies.png',
+           height = 4, width = 9)
+```
+
+```{r binding_overlap, fig.height=5, fig.width=10, fig.cap="Transcription factors and co-factors targets intersects and overlap. A) Intersect sets of transcription factors binding targets during the timecourse of differentiation. B) Fractions of transcription factors CEBPB or PPARG binding overlapping co-factors binding sites at the corresponding time points."}
+binding_peaks <- read_rds('data/binding_peaks.rds')
+gene_annotations <- read_rds('data/gene_annotations.rds') %>%
+    with(split(ENTREZID, category)) %>%
+    map(unique)
+
+peaks_by_group <-  mcols(binding_peaks) %>%
+    as_tibble() %>%
+    filter(!factor %in% c('CTCF', 'EP300'),
+           geneId %in% gene_annotations$Autophagy) %>%
+    group_by(factor, geneId) %>%
+    summarise(times = list(unique(time))) %>%
+    ungroup() %>%
+    group_split(factor)
+
+over_representation <- read_rds('data/targets_over_representation.rds')
+
+plot_grid(
+    map(peaks_by_group,
+    function(x) {
+        ggplot(x, aes(x = times)) +
+            geom_bar() +
+            scale_x_upset(n_intersections = 8) +
+            labs(x = 'Set Intersections (Time)',
+                 y = paste(unique(x$factor), 'Targets'))
+    }) %>%
+    plot_grid(plotlist = ., nrow = 2),
+    as_tibble(over_representation) %>% 
+    separate(group, into = c('subject', 'subject_time')) %>%
+    separate(ID, into = c('query', 'query_time')) %>%
+    separate(GeneRatio, into = c('count', 'bg'), sep = '/') %>%
+    mutate(ratio = as.numeric(count)/as.numeric(bg),
+           subject_time = fct_reorder(factor(subject_time),
+                                      as.numeric(subject_time))) %>%
+    filter(category == 'Autophagy',
+           subject_time == query_time,
+           subject %in% c('MED1', 'RXRG', 'EP300'),
+           query %in% c('PPARG', 'CEBPB')) %>%
+    ggplot(aes(x = subject_time, y = ratio)) +
+    geom_col() +
+    facet_grid(query~subject, scales = 'free_x', space = 'free_x') +
+    labs(x = 'Time (hr)', y = 'Fraction of Overlapping Targets'),
+    scale = .9,
+    nrow = 1,
+    labels = 'AUTO',
+    label_fontface = 'plain'
+) %>%
+    ggsave(plot = .,
+           filename = 'manuscript/figures/binding_overlap.png',
+           height = 5, width = 10)
+```
+
+```{r peaks_overlap_enrichment, fig.height=8, fig.width=6, fig.cap="Multi-state model of the histone modification in differentiating adipocytes. A) Chromatin states of the differentiating adipocytes. Genome segmentation analysis was performed using histone modification markers ChIP-Seq datasets at different time points. The genome was divided into 200bp bins, and each marker was identified as present or absent. Nine stats was used to model the combinatorial states of the markers. Emission, the probability of each marker being at a given state. Transition, the transitional probability of a given state to another. The overlap fold enrichment of each state in a given genomic annotation at different time points (Hour 0, 48 and 168). B) Chromatin states enrichment in the transcription factors and cofactors' binding targets at different time points of adipocyte differentaiton."}
+# hm model
+model_hm <- read_rds('data/model_hm.rds')
+states <- c('Active Promoter', 'Weak Enhancer', 'Active Enhancer',
+            'Genic Enhancer 1', 'Genic Enhancer 2', 'Heterochromatin ',
+            'Repeats', 'Repressed Polycomb', 'Strong Transcription')
+hm_emission <- emission(model_hm)
+rownames(hm_emission) <- states
+hm_transition <- transition(model_hm)
+rownames(hm_transition) <- states
+colnames(hm_transition) <- states
+
+# peaks overlap enrichment
+peaks_overlap_enrichment <- read_rds('data/peaks_overlap_enrichment.rds')
+mats <- peaks_overlap_enrichment %>%
+    group_by(hour) %>%
+    group_split() %>%
+    map(function(x) {
+        m <- dplyr::select(x, -hour, -state, -genome) %>% as.matrix()
+        nms <- str_split(colnames(m), '_', simplify = TRUE)
+        ind <- nms[, 2] == unique(x$hour)
+        m <- (m[, ind])
+        rownames(m) <- states
+        colnames(m) <- nms[, 1][ind]
+        m
+    })
+names(mats) <- unique(peaks_overlap_enrichment$hour)
+
+plot_grid(
+    list('Emisison Probability' = hm_emission,
+     'Transition Probability' = hm_transition) %>%
+    map_df(melt, .id = 'type') %>%
+    ggplot(aes(x = Var2, y = Var1, fill = value)) +
+    geom_tile() +
+    facet_wrap(~type, scales = 'free_x',
+               nrow = 1) +
+    scale_fill_gradient(low = 'white', high = 'blue') +
+    labs(x = '', y = '') +
+    theme(legend.position = 'none',
+          axis.text.x = element_text(angle = 45, hjust = 1)),
+mats[c('0', '48', '168')] %>%
+    map_df(melt, .id = 'type') %>%
+    mutate(type = fct_reorder(paste('Hour', type), as.numeric(type)),
+           Var1 = factor(Var1, levels = states)) %>%
+    ggplot(aes(x = Var2, y = Var1, fill = value)) +
+    geom_tile() +
+    facet_grid(~type, scales = 'free_x', space = 'free_x') +
+    scale_fill_gradient(low = 'white', high = 'blue') +
+    labs(x = '', y = '') +
+    theme(legend.position = 'none',
+          axis.text.x = element_text(angle = 45, hjust = 1)),
+ncol = 1,
+labels = 'AUTO',
+label_fontface = 'plain'
+) %>%
+    ggsave(plot = .,
+           filename = 'manuscript/figures/peaks_overlap_enrichment.png',
+           height = 8, width = 6)
+```
+
+```{r molecular_functions, fig.height=5, fig.width=9, fig.cap="Representation of adipogenic transcription factors targets in autophagy molecular functions. A) Fractions of adipogenic transcription factors autophagy and lipogenesis target genes in selected molecular functions. B) Differential expression of autophagy DNA-binding transcription factors and protein kinase activities during differentiation of pre-adipocytes without (None) or with factor perturbations."}
+mf_overrepresentation <- read_rds('data/molecular_functions_overrepresentation.rds')
+
+terms <- c('protein kinase activity',
+           'DNA-binding transcription factor activity',
+           # 'ubiquitin binding',
+           # 'oxidoreductase activity',
+           # 'hydrolase activity',
+           # 'transferase activity'
+           'phosphatase activity')
+
+gene_annotations <- read_rds('data/gene_annotations.rds') %>%
+    dplyr::select(gene_id = ENTREZID, symbol = SYMBOL)
+
+mf_annotations <- read_rds('data/mf_annotations.rds') %>%
+    filter(term %in% terms) %>%
+    inner_join(gene_annotations) %>%
+    dplyr::select(category, term, gene_id = symbol) %>%
+    unique()
+
+differential_expression <- read_rds('data/differential_expression.rds')
+
+plot_grid(
+    mf_overrepresentation %>%
+        as_tibble() %>%
+        separate(group, c('factor', 'time')) %>%
+        separate(GeneRatio, c('count', 'bg')) %>%
+        mutate(ratio = as.numeric(count)/as.numeric(bg),
+               time = fct_reorder(factor(time), as.numeric(time))) %>%
+        filter(ID %in% terms,
+               factor %in% c('CEBPB', 'PPARG')) %>%
+        ggplot(aes(x = time, y = ratio, fill = ID)) +
+        geom_col(position = 'dodge') +
+        facet_grid(category ~ factor, scales = 'free') +
+        theme(legend.position = 'top',
+              legend.direction = 'vertical') +
+        labs(x = 'Time (hr)', y = 'Fraction of Targets', fill = ''),
+    differential_expression %>%
+        inner_join(mf_annotations) %>%
+        filter(category == 'Autophagy') %>%
+        mutate(time = fct_reorder(factor(time), as.numeric(time))) %>%
+        ggplot(aes(x = time, y = (fold_change))) +
+        geom_boxplot() +
+        facet_grid(term~course, scales = 'free_x', space = 'free_x') +
+        theme(legend.position = 'top',
+              legend.direction = 'vertical') +
+        labs(x = 'Time (hr)', y = 'Fold-change (log_2)', fill = ''),
+    scale = .9,
+    labels = 'AUTO',
+    label_fontface = 'plain'
+) %>%
+    ggsave(plot = .,
+           filename = 'manuscript/figures/molecular_functions.png',
+           height = 5, width = 9)
+```
