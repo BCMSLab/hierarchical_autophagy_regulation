@@ -15,7 +15,7 @@ all: data/gene_annotations.rds \
 	data/targets_over_representation.rds \
 	data/molecular_functions_overrepresentation.rds \
 	manuscript.pdf
-
+	
 data/gene_annotations.rds: scripts/gene_annotations.R
 	$(RDATA)
 	
@@ -70,11 +70,7 @@ data/molecular_functions_overrepresentation.rds: scripts/molecular_functions_ove
 	data/binding_peaks.rds
 	$(RDATA)
 
-supplementary_materials.pdf: supplementary_materials.Rmd \
-	$(bash find data/*)
-	Rscript -e 'rmarkdown::render("supplementary_materials.Rmd")'
-	
 manuscript.pdf: manuscript.Rmd \
 	$(bash find data/*)
-	Rscript -e 'rmarkdown::render("manuscript.Rmd")'
+	Rscript -e 'rmarkdown::render("manuscript.Rmd")' > logs/
 	

@@ -22,8 +22,10 @@ library(reshape2)
 library(ggupset)
 library(cowplot)
 library(DESeq2)
-library(segmentr)
 library(ggupset)
+library(xtable)
+library(scales)
+library(segmentr)
 ```
 
 ```{r autophagy_expression, fig.height=6, fig.width=6, fig.cap="Autophgy gene products expression during adipocyte differentiation. A) Numbers of differentially expressed autophagy genes in either direction (up- or down-regulated) at different time points of differentiation. B) Gene set enrichment of the gene onotlogy term 'autophagy' and 'lipogenesis' at different time points of differentiation. C) Numbers of differentially expressed autophagy genes in either direction (up- or down-regulated) at different time points of differentiation with the perturbation of Pparg or Cebpb. D) Percentage of autophagy gene expression variance explained by the expression of transcription factors and co-factors coding genes during the time course of differentiation."}
@@ -69,47 +71,138 @@ plot_grid(
     ggplot(aes(x = time, y = n, fill = dir)) +
     geom_col(position = 'dodge') +
     labs(x = 'Time (hr)',
-         y = 'Differentially Expressed Genes',
+         y = 'Gene Expression',
          fill = 'Regualtion') +
-    theme(legend.position = 'top'),
+    lims(y = c(0, 90)) +
+    scale_fill_manual(values = c('black', 'darkgray')) +
+    theme(legend.position = c(.5, .9),
+          legend.direction = 'horizontal',
+          legend.background = element_blank(),
+          panel.grid = element_blank(),
+          axis.text = element_text(size = 11),
+          axis.title = element_text(size = 14)),
         gene_set_enrichment %>%
     filter(grepl('None', group),
     pathway %in% c('GO:0006914', 'GO:0006629')) %>%
     separate(group, c('course', 'time'), '_') %>%
     mutate(time = fct_reorder(factor(time), as.numeric(time))) %>%
-    ggplot(aes(x = time, y= NES, color = pathway, group = pathway)) +
+    ggplot(aes(x = time, y= NES, group = pathway)) +
     geom_point() +
     geom_line() +
-    annotate('text', c(6, 6), y = c(0, 1.5),
-    label = c('Autophagy', 'Lipogenesis')) +
+    annotate('text', c(6.5, 6), y = c(0, 1.5),
+             label = c('Autophagy', 'Lipogenesis')) +
     labs(x = 'Time (hr)',
-         y = 'Normalized Enrichment Score') +
-    theme(legend.position = 'none'),
+         y = 'Enrichment Score') +
+    theme(legend.position = 'none',
+          panel.grid = element_blank(),
+          axis.text = element_text(size = 11),
+          axis.title = element_text(size = 14)),
     differential_expression %>%
     filter(category == 'Autophagy',
            course != 'None') %>%
     ggplot(aes(x = time, y = n, fill = dir)) +
     geom_col(position = 'dodge') +
     facet_grid(~course, scales = 'free_x', space = 'free_x') +
+    lims(y = c(0, 40)) +
+    scale_fill_manual(values = c('black', 'darkgray')) +
     labs(x = 'Time (hr)',
-         y = 'Differentially Expressed Genes',
+         y = 'Gene Expression',
          fill = 'Regualtion') +
-    theme(legend.position = 'top'),
+    theme(legend.position = c(.5, .9),
+          legend.direction = 'horizontal',
+          legend.background = element_blank(),
+          panel.grid = element_blank(),
+          strip.background = element_blank(),
+          axis.text = element_text(size = 12),
+          axis.title = element_text(size = 14)),
     variance %>%
     filter(gene %in% factors) %>%
     mutate(gene = fct_reorder(gene, var_exp)) %>%
     ggplot(aes(x = gene, y = var_exp, .desc = TRUE)) +
-    geom_col() +
-    labs(x = 'Transcription Factor Gene',
-         y = 'Variance Explained (%)'),
+    geom_col(width = .8) +
+    labs(x = 'Factor Gene',
+         y = 'Variance Explained') +
+    theme(panel.grid = element_blank(),
+          axis.text = element_text(size = 12),
+          axis.title = element_text(size = 14)),
     nrow = 2,
     labels = 'AUTO',
     label_fontface = 'plain',
-    scale = .9
+    scale = .95
 ) %>%
     ggsave(plot = .,
            filename = 'manuscript/figures/autophagy_expression.png',
            height = 6, width = 6)
+```
+
+```{r autophagy_categories}
+cats <- list(
+    'Regulation' = list(
+        'GO:0010507' = 'negative regulation of autophagy',
+        'GO:0010508' = 'positive regulation of autophagy'
+    ),
+    'Selective' = list(
+        'GO:0035973' = 'aggrephagy',
+        'GO:0000423' = 'mitophagy',
+        'GO:0061709' = 'reticulophagy',
+        'GO:0098792' = 'xenophagy'
+    ),
+    'Subtypes' = list(
+        'GO:0000422' = 'autophagy of mitochondrion',
+        'GO:0030242' = 'autophagy of peroxisome',
+        'GO:0061684' = 'chaperone-mediated autophagy',
+        'GO:0061738' = 'late endosomal microautophagy',
+        'GO:0016236' = 'macroautophagy')
+) %>%
+    melt() %>%
+    setNames(c('subcat', 'pathway', 'cat'))
+
+cats <- list(
+    'Regulation' = list(
+        'GO:0010507' = 'negative',
+        'GO:0010508' = 'positive'
+    ),
+    'Selective' = list(
+        'GO:0035973' = 'aggrephagy',
+        'GO:0000423' = 'mitophagy',
+        'GO:0061709' = 'reticulophagy',
+        'GO:0098792' = 'xenophagy'
+    ),
+    'Subtypes' = list(
+        'GO:0000422' = 'mitochondrion',
+        'GO:0030242' = 'peroxisome',
+        'GO:0061684' = 'chaperone-mediated',
+        'GO:0061738' = 'late-endosomal',
+        'GO:0016236' = 'macroautophagy')
+) %>%
+    melt() %>%
+    setNames(c('subcat', 'pathway', 'cat'))
+
+gene_set_enrichment <- read_rds('data/gene_set_enrichment.rds')
+
+nes <- gene_set_enrichment %>%
+    filter(grepl('None', group)) %>%
+    right_join(cats) %>%
+    separate(group, c('course', 'time'), '_') %>%
+    mutate(time = fct_reorder(factor(time), as.numeric(time))) %>%
+    dcast(cat + subcat + pathway ~ time, value.var = 'NES') 
+
+png(filename = 'manuscript/figures/autophagy_categories.png',
+    height = 8, width = 10, units = 'cm', res = 300)
+
+Heatmap(as.matrix(nes[, 4:ncol(nes)]),
+        cluster_columns = FALSE,
+        cluster_rows = FALSE,
+        row_split = nes$cat,
+        row_labels = nes$subcat,
+        column_title = 'Time (hr)',
+        row_title = 'Enrichment Score',
+        row_title_side = 'right',
+        row_names_side = 'left',
+        column_title_side = 'bottom',
+        show_heatmap_legend = FALSE)
+
+dev.off()
 ```
 
 ```{r model_factors, fig.height=8, fig.width=6, fig.cap="Transcription factor states in the differentiating adipocytes. Genome segmentation analysis wasperformed using transcription factors ChIP-Seq datasets at different time points. The genome was dividedinto 100bp bins, and each factor was identified as present or absent. Ten and eight stats was used to modelthe combinatorial states of the factors from A) 0 to day 2 B) from 0 to day 7, respectively. Emission, theprobability of each marker being at a given state. Transition, the transitional probability of a given state toanother."}
@@ -118,11 +211,11 @@ states_factor_short <- c('Insulated',
             'Insulated + Ubiquitous Binding', 'Ubiquitous Binding',
             'Co-Factor Binding',
             'Factor Devoid 1', 
-            'Early Acting (CEBPB + MED1)',
+            'Early Acting (CEBPB/MED1)',
             'Factor Devoid 2',
             'Factor Devoid 3',
             'Repressed',
-            'Long Acting (PPARG + RXRG)')
+            'Long term (PPARG/RXRG)')
 short_emission <- emission(model_factors_short)
 rownames(short_emission) <- states_factor_short
 short_transition <- transition(model_factors_short)
@@ -130,12 +223,12 @@ rownames(short_transition) <- states_factor_short
 colnames(short_transition) <- states_factor_short
 
 model_factors_long <- read_rds('data/model_factors_long.rds')
-states_factor_long <- c('Early Acting (CEBPB + MED1 + RXRG)',
+states_factor_long <- c('CEBPB + (MED1/RXRG)',
             'Factor Devoid 1', 
-            'Long Acting (PPARG + RXRG)',
+            'Long term (PPARG/RXRG)',
             'Factor Devoid 2', 
-            'Long Acting (PPARG)',
-            'Long Acting (PPARG + RXRG + MED1)',
+            'Long term (PPARG)',
+            'PPARG + (RXRG/MED1)',
             'Ubiquitous Binding',
             'Insulated')
 
@@ -151,27 +244,71 @@ model <- list(
     list('Emission Probability' = long_emission,
         'Transition Probability' = long_transition)
 )
-model %>%
-    map(
-    function(x) map_df(x, melt, .id = 'type') %>%
-    as_tibble() %>%
-    ggplot(aes(x = Var2, y = Var1, fill = value)) +
-    geom_tile() +
-    facet_wrap(~type, scales = 'free_x',
-               nrow = 1) +
-    scale_fill_gradient(low = 'white', high = 'blue') +
-    labs(x = '', y = '') +
-    theme(legend.position = 'none',
-          axis.text.x = element_text(angle = 45, hjust = 1))
-    ) %>%
-    plot_grid(plotlist = .,
-              ncol = 1,
-              labels = 'AUTO',
-              label_fontface = 'plain') %>%
-    ggsave(plot = .,
-           filename = 'manuscript/figures/model_factors.png',
-           height = 8, width = 6)
+names(model) <- c('short', 'long')
+
+# figure
+png(filename = 'manuscript/figures/model_factors.png',
+    height = 22, width = 16, units = 'cm', res = 300)
+
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(nr = 2, nc = 1)))
+pushViewport(viewport(layout.pos.row = 1, layout.pos.col = 1))
+col_func <- circlize::colorRamp2(c(0, 1), c('white', 'black'))
+
+draw(
+  Heatmap(model$short$`Emission Probability`,
+        col = col_func,
+        show_heatmap_legend = FALSE,
+        show_row_dend = FALSE,
+        show_column_dend = FALSE,
+        row_names_side = 'left',
+        column_names_rot = 45,
+        column_title = 'Emissions') +
+  Heatmap(model$short$`Transition Probability`,
+        col = col_func,
+        cluster_columns = FALSE,
+        show_heatmap_legend = FALSE,
+        show_row_dend = FALSE,
+        show_column_dend = FALSE,
+        row_names_side = 'left',
+        column_names_rot = 45,
+        column_title = 'Transitions'),
+  newpage = FALSE
+)
+grid.text("A", x = 0, y = 1, just = c("left", "top"),
+          gp = gpar(fontsize = 18))
+upViewport()
+
+pushViewport(viewport(layout.pos.row = 2, layout.pos.col = 1))
+
+draw(
+  Heatmap(model$long$`Emission Probability`,
+        col = col_func,
+        cluster_columns = FALSE,
+        show_heatmap_legend = FALSE,
+        show_row_dend = FALSE,
+        show_column_dend = FALSE,
+        row_names_side = 'left',
+        column_names_rot = 45,
+        column_title = 'Emissions') +
+  Heatmap(model$long$`Transition Probability`,
+        col = col_func,
+        show_heatmap_legend = FALSE,
+        show_row_dend = FALSE,
+        show_column_dend = FALSE,
+        row_names_side = 'left',
+        column_names_rot = 45,
+        column_title = 'Transitions'),
+  newpage = FALSE
+)
+grid.text("B", x = 0, y = 1, just = c("left", "top"),
+          gp = gpar(fontsize = 18))
+
+upViewport()
+
+dev.off()
 ```
+
 
 ```{r state_frequencies, fig.height=4, fig.width=9, fig.cap="Frequencies of states in transcription factor and co-factors multi-states chromatine models. A) The fraction of selected states to the total in autophagy and lipogenesis genes of the A) early B) late-acting transcription factors models are shown."}
 gene_annotations <- read_rds('data/gene_annotations.rds') %>%
@@ -185,14 +322,25 @@ plot_grid(
                      name = states_factor_short)) %>%
     filter(category %in% c('Autophagy', 'Lipogenesis'),
            abs(distanceToTSS) < 50000,
-           name %in% states_factor_short[c(1:4, 9)]) %>%
+           name %in% states_factor_short[c(1, 3, 4, 9)]) %>%
+    mutate(time = str_split(time, '_', simplify = TRUE)[, 2]) %>%
     ggplot(aes(x = name, fill = time)) +
-    geom_bar(position = 'dodge') +
+    geom_bar(position = 'dodge', width = .8) +
     coord_flip() +
     labs(y = 'State Frequency', x = '', fill = 'Time (hr)') +
     facet_wrap(~category, scales = 'free_x', nrow = ) +
-    theme(legend.position = 'top'),
-map_df(segment(model_factors_long), as_tibble, .id = 'time') %>%
+    scale_fill_manual(values = c('black', 'darkgray')) +
+    scale_x_discrete(labels = wrap_format(10)) +
+    theme(legend.position = c(.83, .91),
+          legend.direction = 'horizontal',
+          legend.background = element_blank(),
+          panel.grid = element_blank(),
+          strip.background = element_blank(),
+          strip.text = element_text(size = 12),
+          axis.text = element_text(size = 12),
+          axis.title = element_text(size = 14),
+          plot.margin = unit(c(0,0,0,0), "cm")),
+    map_df(segment(model_factors_long), as_tibble, .id = 'time') %>%
     left_join(gene_annotations) %>%
     left_join(tibble(state = paste0('E', 1:8),
                      name = states_factor_long)) %>%
@@ -202,18 +350,25 @@ map_df(segment(model_factors_long), as_tibble, .id = 'time') %>%
     mutate(time = str_split(time, '_',simplify = TRUE)[, 2],
            time = fct_reorder(time, as.numeric(time))) %>%
     ggplot(aes(x = time, fill = name)) +
-    geom_bar() +
-    facet_wrap(~category, scales = 'free_x') +
-    labs(x = 'Time (hr)', y = 'State Frequency', fill = '') +
-    theme(legend.position = 'top',
-          legend.direction = 'vertical'),
-scale = .9,
+    geom_bar(aes(y = (..count..)/sum(..count..)), width = .8) + 
+    facet_wrap(~category, scales = 'free_y') +
+    labs(x = 'Time (hr)', y = 'State Frequency', fill = 'States') +
+    theme(legend.direction = 'vertical',
+          panel.grid = element_blank(),
+          strip.background = element_blank(),
+          strip.text = element_text(size = 12),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 14),
+          plot.margin = unit(c(0,0,0,0), "cm"),
+          legend.key.size = unit(.8,"line")),
+scale = .95,
+ncol = 1,
 labels = 'AUTO',
 label_fontface = 'plain'
 ) %>%
     ggsave(plot = .,
            filename = 'manuscript/figures/state_frequencies.png',
-           height = 4, width = 9)
+           height = 7, width = 7)
 ```
 
 ```{r binding_overlap, fig.height=5, fig.width=10, fig.cap="Transcription factors and co-factors targets intersects and overlap. A) Intersect sets of transcription factors binding targets during the timecourse of differentiation. B) Fractions of transcription factors CEBPB or PPARG binding overlapping co-factors binding sites at the corresponding time points."}
@@ -233,16 +388,61 @@ peaks_by_group <-  mcols(binding_peaks) %>%
 
 over_representation <- read_rds('data/targets_over_representation.rds')
 
+names(peaks_by_group) <- unlist(map(peaks_by_group, function(x) unique(x$factor)))
+
 plot_grid(
-    map(peaks_by_group,
-    function(x) {
-        ggplot(x, aes(x = times)) +
-            geom_bar() +
-            scale_x_upset(n_intersections = 8) +
-            labs(x = 'Set Intersections (Time)',
-                 y = paste(unique(x$factor), 'Targets'))
-    }) %>%
-    plot_grid(plotlist = ., nrow = 2),
+    plot_grid(
+  peaks_by_group$PPARG %>%
+  ggplot(aes(x = times)) +
+  geom_bar(width = .8) +
+  scale_x_upset(n_intersections = 7) +
+  labs(x = '',
+       y = 'Number of Targets') +
+  ggtitle('PPARG') +
+  theme(panel.grid = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(hjust = .95, margin = margin(t = 0, b = -20, l = 0, r = 0)),
+        plot.background = element_blank(),
+        axis.title = element_text(size = 14)),
+peaks_by_group$RXRG %>%
+  ggplot(aes(x = times)) +
+  geom_bar(width = .8) +
+  scale_x_upset(n_intersections = 7) +
+  labs(x = '',
+       y = '') +
+  ggtitle('RXRG') +
+  lims(y = c(0, 15)) +
+  theme(panel.grid = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(hjust = .95, margin = margin(t = 0, b = -20, l = 0, r = 0)),
+        plot.background = element_blank()),
+peaks_by_group$CEBPB %>%
+  ggplot(aes(x = times)) +
+  geom_bar(width = .8) +
+  scale_x_upset(n_intersections = 7) +
+  labs(x = 'Intersections',
+       y = 'Number of Targets') +
+  ggtitle('CEBPB') +
+  theme(panel.grid = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(hjust = .95, margin = margin(t = 0, b = -20, l = 0, r = 0)),
+        plot.background = element_blank(),
+        axis.title = element_text(size = 14),),
+peaks_by_group$MED1 %>%
+  ggplot(aes(x = times)) +
+  geom_bar(width = .8) +
+  scale_x_upset(n_intersections = 7) +
+  labs(x = 'Intersections',
+       y = '') +
+  ggtitle('MED1') +
+  theme(panel.grid = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(hjust = .95, margin = margin(t = 0, b = -20, l = 0, r = 0)),
+        axis.title = element_text(size = 14),
+        plot.background = element_blank()),
+nrow = 2,
+scale = 1.08
+),
     as_tibble(over_representation) %>% 
     separate(group, into = c('subject', 'subject_time')) %>%
     separate(ID, into = c('query', 'query_time')) %>%
@@ -255,17 +455,23 @@ plot_grid(
            subject %in% c('MED1', 'RXRG', 'EP300'),
            query %in% c('PPARG', 'CEBPB')) %>%
     ggplot(aes(x = subject_time, y = ratio)) +
-    geom_col() +
+    geom_col(width = .8) +
     facet_grid(query~subject, scales = 'free_x', space = 'free_x') +
-    labs(x = 'Time (hr)', y = 'Fraction of Overlapping Targets'),
+    labs(x = 'Time (hr)', y = 'Fraction of Overlapping Targets') +
+    theme(panel.grid = element_blank(),
+          strip.background = element_blank(),
+          strip.text = element_text(size = 14),
+          axis.text = element_text(size = 12),
+          axis.title = element_text(size = 14),
+          plot.margin = unit(c(0,0,0,0), 'mm')),
     scale = .9,
-    nrow = 1,
+    ncol = 1,
     labels = 'AUTO',
     label_fontface = 'plain'
 ) %>%
     ggsave(plot = .,
            filename = 'manuscript/figures/binding_overlap.png',
-           height = 5, width = 10)
+           height = 12, width = 6)
 ```
 
 ```{r peaks_overlap_enrichment, fig.height=8, fig.width=6, fig.cap="Multi-state model of the histone modification in differentiating adipocytes. A) Chromatin states of the differentiating adipocytes. Genome segmentation analysis was performed using histone modification markers ChIP-Seq datasets at different time points. The genome was divided into 200bp bins, and each marker was identified as present or absent. Nine stats was used to model the combinatorial states of the markers. Emission, the probability of each marker being at a given state. Transition, the transitional probability of a given state to another. The overlap fold enrichment of each state in a given genomic annotation at different time points (Hour 0, 48 and 168). B) Chromatin states enrichment in the transcription factors and cofactors' binding targets at different time points of adipocyte differentaiton."}
@@ -296,40 +502,95 @@ mats <- peaks_overlap_enrichment %>%
     })
 names(mats) <- unique(peaks_overlap_enrichment$hour)
 
-plot_grid(
-    list('Emisison Probability' = hm_emission,
-     'Transition Probability' = hm_transition) %>%
-    map_df(melt, .id = 'type') %>%
-    ggplot(aes(x = Var2, y = Var1, fill = value)) +
-    geom_tile() +
-    facet_wrap(~type, scales = 'free_x',
-               nrow = 1) +
-    scale_fill_gradient(low = 'white', high = 'blue') +
-    labs(x = '', y = '') +
-    theme(legend.position = 'none',
-          axis.text.x = element_text(angle = 45, hjust = 1)),
+png(filename = 'manuscript/figures/peaks_overlap_enrichment.png',
+    height = 20, width = 15, units = 'cm', res = 300)
+
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(nr = 2, nc = 1)))
+pushViewport(viewport(layout.pos.row = 1, layout.pos.col = 1))
+col_func <- circlize::colorRamp2(c(0, 1), c('white', 'black'))
+
+
+draw(
+  Heatmap(hm_emission,
+        col = col_func,
+        show_heatmap_legend = FALSE,
+        show_row_dend = FALSE,
+        show_column_dend = FALSE,
+        row_names_side = 'left',
+        column_names_rot = 45,
+        column_title = 'Emissions') +
+  Heatmap(hm_transition,
+        col = col_func,
+        cluster_columns = FALSE,
+        show_heatmap_legend = FALSE,
+        show_row_dend = FALSE,
+        show_column_dend = FALSE,
+        row_names_side = 'left',
+        column_names_rot = 45,
+        column_title = 'Transitions'),
+  newpage = FALSE
+)
+grid.text("A", x = 0, y = 1, just = c("left", "top"),
+          gp = gpar(fontsize = 18))
+upViewport()
+
+pushViewport(viewport(layout.pos.row = 2, layout.pos.col = 1))
+
+col_func <- circlize::colorRamp2(c(0, 56), c('white', 'black'))
+
+draw(
+  Heatmap(mats$`0`,
+          col = col_func,
+          show_row_dend = FALSE,
+          show_column_dend = FALSE,
+          row_names_side = 'left',
+          column_names_rot = 45,
+          show_heatmap_legend = FALSE,
+          column_title = '0 hour') +
+  Heatmap(mats$`48`,
+          col = col_func,
+          show_column_dend = FALSE,
+          row_names_side = 'left',
+          column_names_rot = 45,
+          show_heatmap_legend = FALSE,
+          column_title = '48 hours')+
+  Heatmap(mats$`168`,
+          col = col_func,
+          show_column_dend = FALSE,
+          row_names_side = 'left',
+          column_names_rot = 45,
+          show_heatmap_legend = FALSE,
+          column_title = '148 hours'),
+  newpage = FALSE
+)
+grid.text("B", x = 0, y = 1, just = c("left", "top"),
+          gp = gpar(fontsize = 18))
+
+upViewport()
+
+dev.off()
+```
+
+```{r binding_enrichment_states}
 mats[c('0', '48', '168')] %>%
     map_df(melt, .id = 'type') %>%
-    mutate(type = fct_reorder(paste('Hour', type), as.numeric(type)),
-           Var1 = factor(Var1, levels = states)) %>%
-    ggplot(aes(x = Var2, y = Var1, fill = value)) +
-    geom_tile() +
-    facet_grid(~type, scales = 'free_x', space = 'free_x') +
-    scale_fill_gradient(low = 'white', high = 'blue') +
-    labs(x = '', y = '') +
-    theme(legend.position = 'none',
-          axis.text.x = element_text(angle = 45, hjust = 1)),
-ncol = 1,
-labels = 'AUTO',
-label_fontface = 'plain'
-) %>%
-    ggsave(plot = .,
-           filename = 'manuscript/figures/peaks_overlap_enrichment.png',
-           height = 8, width = 6)
+    as_tibble() %>%
+    mutate(value = round(value, 1)) %>%
+    filter(grepl('Enhancer|Promoter', Var1),
+           grepl('PPARG|CEBPB', Var2)) %>%
+    dcast(Var2 + type ~ Var1, value.var = 'value')
 ```
 
 ```{r molecular_functions, fig.height=5, fig.width=9, fig.cap="Representation of adipogenic transcription factors targets in autophagy molecular functions. A) Fractions of adipogenic transcription factors autophagy and lipogenesis target genes in selected molecular functions. B) Differential expression of autophagy DNA-binding transcription factors and protein kinase activities during differentiation of pre-adipocytes without (None) or with factor perturbations."}
 mf_overrepresentation <- read_rds('data/molecular_functions_overrepresentation.rds')
+
+# terms <- c('transcription factor binding',
+#            'transcription coactivator activity',
+#            'enzyme regulator activity',
+#            'transcription regulator activity',
+#            'transmembrane transporter activity',
+#            'transcription coregulator activity')
 
 terms <- c('protein kinase activity',
            'DNA-binding transcription factor activity',
@@ -338,6 +599,8 @@ terms <- c('protein kinase activity',
            # 'hydrolase activity',
            # 'transferase activity'
            'phosphatase activity')
+
+terms_short <- c('kinases', 'transcription factors', 'phosphatase')
 
 gene_annotations <- read_rds('data/gene_annotations.rds') %>%
     dplyr::select(gene_id = ENTREZID, symbol = SYMBOL)
@@ -359,27 +622,201 @@ plot_grid(
                time = fct_reorder(factor(time), as.numeric(time))) %>%
         filter(ID %in% terms,
                factor %in% c('CEBPB', 'PPARG')) %>%
-        ggplot(aes(x = time, y = ratio, fill = ID)) +
-        geom_col(position = 'dodge') +
-        facet_grid(category ~ factor, scales = 'free') +
-        theme(legend.position = 'top',
-              legend.direction = 'vertical') +
+        left_join(tibble(ID = terms,
+                         short = terms_short)) %>%
+        ggplot(aes(x = time, y = ratio, fill = short)) +
+        geom_col(position = 'dodge', width = .8) +
+        facet_grid(category ~ factor, scales = 'free', drop = FALSE) +
+        theme(legend.position = c(.2, .9),
+              legend.direction = 'vertical',
+              legend.background = element_blank(),
+              panel.grid = element_blank(),
+              strip.background = element_blank(),
+              strip.text = element_text(size = 14),
+              axis.text = element_text(size = 12),
+              axis.title = element_text(size = 14),
+              plot.margin = unit(c(0,0,0,0), 'mm')) +
         labs(x = 'Time (hr)', y = 'Fraction of Targets', fill = ''),
     differential_expression %>%
         inner_join(mf_annotations) %>%
+        left_join(tibble(term = terms, short = terms_short)) %>%
         filter(category == 'Autophagy') %>%
         mutate(time = fct_reorder(factor(time), as.numeric(time))) %>%
         ggplot(aes(x = time, y = (fold_change))) +
         geom_boxplot() +
-        facet_grid(term~course, scales = 'free_x', space = 'free_x') +
-        theme(legend.position = 'top',
-              legend.direction = 'vertical') +
+        facet_grid(short~course, scales = 'free_x', space = 'free_x') +
+        theme(panel.grid = element_blank(),
+              strip.background = element_blank(),
+              strip.text = element_text(size = 14),
+              axis.text = element_text(size = 12),
+              axis.title = element_text(size = 14),
+              plot.margin = unit(c(0,0,0,0), 'mm')) +
         labs(x = 'Time (hr)', y = 'Fold-change (log_2)', fill = ''),
-    scale = .9,
+    scale = .95,
+    ncol = 1,
     labels = 'AUTO',
     label_fontface = 'plain'
 ) %>%
     ggsave(plot = .,
            filename = 'manuscript/figures/molecular_functions.png',
-           height = 5, width = 9)
+           height = 12, width = 6)
+
+```
+
+```{r expression_data}
+adipo_counts <- read_rds('data/adipo_counts.rds')
+pd <- colData(adipo_counts)[adipo_counts$time %in% c(0, 2, 4, 24, 48, 144, 168, 192, 240),] %>%
+    as_tibble() %>%
+    dplyr::select(study_name, time, bibtexkey)
+names(colData(adipo_counts))
+pd %>%
+    group_by(study_name, bibtexkey) %>%
+    summarise(n = n(),
+              time = paste(unique(time), collapse = '/')) %>%
+    ungroup() %>%
+    dplyr::select(study_name, n, time, bibtexkey) %>%
+    mutate(bibtexkey = paste0('\\cite{', bibtexkey, '}')) %>%
+    setNames(c('GEO ID', 'N', 'Time (hr)', 'Ref.')) %>%
+    xtable(align = 'clclc') %>%
+    print(floating = FALSE,
+          include.rownames = FALSE,
+          booktabs = TRUE,
+          sanitize.text.function = identity,
+          comment = FALSE,
+          file = 'manuscript/tables/expression_data.tex')
+```
+
+```{r binding_data}
+md <- map_df(
+    c('data/segmentation/input_files_factors_long.tsv',
+      'data/segmentation/input_files_factors_short.tsv'),
+    read_tsv,
+    col_names = c('time', 'factor', 'gsm')
+) %>%
+    mutate(gsm = str_split(gsm, '\\.', simplify = TRUE)[, 1])
+ peak_counts <- read_rds('data/peak_counts.rds')
+pd <- colData(peak_counts) %>% 
+    as_tibble() %>%
+    filter(id %in% md$gsm) %>%
+    dplyr::select(study, factor, bibtexkey)
+
+pd %>%
+    group_by(study, bibtexkey) %>%
+    summarise(n = n(),
+              factor = paste(unique(factor), collapse = '/ ' )) %>%
+    ungroup() %>%
+    dplyr::select(study, n, factor, bibtexkey) %>%
+    mutate(bibtexkey = paste0('\\cite{', bibtexkey, '}')) %>%
+    setNames(c('SRA ID', 'N', 'Antibody', 'Ref.')) %>%
+    xtable(align = 'clcp{.15\\textwidth}c') %>%
+    print(floating = FALSE,
+          include.rownames = FALSE,
+          booktabs = TRUE,
+          sanitize.text.function = identity,
+          comment = FALSE,
+          file = 'manuscript/tables/binding_data.tex')
+```
+
+```{r hm_data}
+md <- read_tsv('data/segmentation/hm/input_files_hm.tsv',
+               col_names = c('time', 'hm', 'gsm')) %>%
+    mutate(gsm = str_split(gsm, '\\.', simplify = TRUE)[, 1])
+# peak_counts <- read_rds('data/peak_counts.rds')
+pd <- colData(peak_counts) %>% 
+    as_tibble() %>%
+    filter(id %in% md$gsm) %>%
+    dplyr::select(study, factor, bibtexkey)
+
+pd %>%
+    group_by(study, bibtexkey) %>%
+    summarise(n = n(),
+              factor = paste(unique(factor), collapse = '/ ')) %>%
+    ungroup() %>%
+    dplyr::select(study, n, factor, bibtexkey) %>%
+    mutate(bibtexkey = paste0('\\cite{', bibtexkey, '}')) %>%
+    setNames(c('SRA ID', 'N', 'Antibody', 'Ref.')) %>%
+    xtable(align = 'clcp{.15\\textwidth}c') %>%
+    print(floating = FALSE,
+          include.rownames = FALSE,
+          booktabs = TRUE,
+          sanitize.text.function = identity,
+          comment = FALSE,
+          file = 'manuscript/tables/hm_data.tex')
+```
+
+```{r factors_course}
+gene_annotations <- read_rds('data/gene_annotations.rds') %>%
+    filter(grepl('Autophagy', category)) %>%
+    dplyr::select(geneId = ENTREZID, gene_id = SYMBOL) %>%
+    unique() %>%
+    as_tibble()
+
+res <- read_rds('data/differential_expression.rds')
+
+binding_peaks <- read_rds('data/binding_peaks.rds')
+targets <- mcols(binding_peaks) %>%
+    as_tibble() %>%
+    dplyr::select(factor_time = time, factor, geneId) %>%
+    unique() %>%
+    right_join(gene_annotations) %>%
+    na.omit()
+
+png(filename = 'manuscript/figures/factors_course.png',
+    height = 8, width = 16, units = 'cm', res = 300)
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(nr = 1, nc = 2)))
+pushViewport(viewport(layout.pos.row = 1, layout.pos.col = 1))
+
+draw(
+  targets %>%
+    left_join(res) %>%
+    filter(factor == 'PPARG',
+           course == 'None') %>%
+    acast(factor_time ~ time,
+          value.var = 'fold_change',
+          fun.aggregate = median) %>%
+    Heatmap(show_row_names = TRUE,
+            cluster_columns = FALSE,
+            show_row_dend = FALSE,
+            show_heatmap_legend = FALSE,
+            row_title = 'Gene Targets at (hr)',
+            row_title_side = 'right',
+            column_title = 'Time (hr)',
+            column_title_side = 'bottom'),
+  newpage = FALSE,
+  padding = unit(c(0, 7, 7, 0), "mm")
+)
+
+grid.text("A", x = 0, y = 1, just = c("left", "top"),
+          gp = gpar(fontsize = 14))
+upViewport()
+
+pushViewport(viewport(layout.pos.row = 1, layout.pos.col = 2, just = 'left'))
+
+draw(
+  targets %>%
+    left_join(res) %>%
+    filter(factor == 'CEBPB',
+           course == 'None') %>%
+    acast(factor_time ~ time,
+          value.var = 'fold_change',
+          fun.aggregate = median) %>%
+    Heatmap(show_row_names = TRUE,
+            cluster_columns = FALSE,
+            show_row_dend = FALSE,
+            show_heatmap_legend = FALSE,
+            row_title = 'Gene Targets at (hr)',
+            row_title_side = 'right',
+            column_title = 'Time (hr)',
+            column_title_side = 'bottom'),
+  newpage = FALSE,
+  padding = unit(c(0, 7, 7, 0), "mm")
+)
+
+grid.text("B", x = 0, y = 1, just = c("left", "top"),
+          gp = gpar(fontsize = 14))
+
+upViewport()
+
+dev.off()
 ```

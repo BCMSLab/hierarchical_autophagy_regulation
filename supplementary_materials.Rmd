@@ -1,5 +1,5 @@
 ---
-title: "EDA: Hierarchical Regulation of Autophagy During Adipocyte Differentiation"
+title: "Supplementary Materials: Hierarchical Regulation of Autophagy During Adipocyte Differentiation"
 author: "Mahmoud Shaaban"
 date: "`r Sys.Date()`"
 output: pdf_document
