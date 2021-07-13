@@ -4,3 +4,6 @@
 [submodule "ChromHMM"]
 	path = ChromHMM
 	url = https://github.com/jernst98/ChromHMM
+[submodule "manuscript2"]
+	path = manuscript2
+	url = https://git.overleaf.com/607f88e29417c814f5eab0ff

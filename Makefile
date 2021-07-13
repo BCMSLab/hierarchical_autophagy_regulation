@@ -72,5 +72,5 @@ data/molecular_functions_overrepresentation.rds: scripts/molecular_functions_ove
 
 manuscript.pdf: manuscript.Rmd \
 	$(bash find data/*)
-	Rscript -e 'rmarkdown::render("manuscript.Rmd")' > logs/
+	Rscript -e 'rmarkdown::render("manuscript.Rmd")'
 	
